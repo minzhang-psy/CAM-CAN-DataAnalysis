@@ -1,0 +1,688 @@
+---
+title: "Volume Analysis"
+author: "Min Zhang"
+output: 
+  html_document: 
+    toc: true
+    toc_float: true
+    df_print: paged
+    code_float: hide
+    code_folding: hide    #hide code to dropdown
+    theme: flatly
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(output = FALSE)
+
+#install.packages("rstatix")
+library(stringr)
+library(dplyr)
+library(tidyverse)
+library(readxl)
+library(ggplot2)
+library(ggcorrplot)
+library(tidyr)
+library(dplyr)
+library(data.table)
+#library(ggpubr)
+library(psych)
+library(rstatix)
+
+# read in data
+#source("~/Dropbox (University of Oregon)/EmoReg_CamCAN/AnalysisMZ/VolumeanalysisDFMZ.R")
+Volume <- read_csv("~/EmoReg_CamCAN/camcan_ER_with_ROI_volume.csv")
+#Data summary for error bar 
+#+++++++++++++++++++++++++
+# Function to calculate the mean and the standard deviation
+  # for each group
+#+++++++++++++++++++++++++
+# data : a data frame
+# varname : the name of a column containing the variable
+  #to be summariezed
+# groupnames : vector of column names to be used as
+  # grouping variables
+Data_summary <- function(data, varname, groupnames){
+  require(plyr)
+  summary_func <- function(x, col){
+    c(mean = mean(x[[col]], na.rm=TRUE),
+      sd = sd(x[[col]], na.rm=TRUE))
+  }
+  data_sum <- ddply(data, groupnames, .fun=summary_func, varname)
+  data_sum <- rename(data_sum, c("mean" = varname))
+  return(data_sum)
+}
+
+```
+
+```{css document style, echo=FALSE}
+<!-- p { -->
+<!--   font-size: 12px; -->
+<!-- } -->
+<!-- h1, h2, h3 { -->
+<!--   text-align: center; -->
+<!-- } -->
+```
+# DESCRIPTION OF EXPERIMENT 
+=========================
+Subjects view 30 second film clips across four different conditions: Watch Neutral, Watch Positive, 
+Watch Negative and Reappraise Negative. In the watch conditions they are instucted to simply watch
+the films and allow for their emotions to arise naturally. In the reappraise condition they are 
+asked to reduce their negative emotions by changing the way they think about the content of the films.
+After each film clip they are instructed to rate their emotions during the film. Ratings are provided 
+on two likert scales measuring positive and negative emotions, ranging from '0' = Not Negative/Positive
+at all to '100' = Extremely Negative/Positive.
+After their mood ratings participants are asked how well they were able to complie with the task
+instuction by indicating on a Likert scale how much they Reappraised/Watch the film clip.
+
+Ratings on all scales are made by moving a cursor up and down the scales using the left and right arrow
+keys.
+
+The task is implemented in E-Prime 2. 
+
+
+#  Variable  
+
+VARIABLE               DESCRIPTION                      		                     UNITS/RANGE
+----------------      ------------------------------   		                       ---------------
+CCID                  CamCAN ID (string)                                          CC######
+Ntrials               Number of trials                                            Integer (0:38)
+PctExpectted          Percent of # expected trials                                Ntrials/38
+Version               Version of experiment                                       1|2|3|4
+NeuW_neg              Negative emotion rating for Watch Neutral                   1-11
+NeuW_pos              Positive emotion rating for Watch Neutral                   1-11
+NeuW_WvsR             Instruction adherence rating for Watch Neutral              1-11
+NeuW_aver	
+NegW_neg              Negative emotion rating for Watch Negative                  1-11
+NegW_pos              Positive emotion rating for Watch Negative                  1-11
+NegW_WvsR             Instruction adherence rating for Watch Negative             1-11
+NegW_aver	
+PosW_neg              Negative emotion rating for Watch Positive                  1-11
+PosW_pos              Positive emotion rating for Watch Positive                  1-11
+PosW_WvsR             Instruction adherence rating for Watch Positive             1-11
+PosW_aver	
+NegR_neg              Negative emotion rating for Reappraise Negative             1-11
+NegR_pos              Positive emotion rating for Reappraise Negative             1-11
+NegR_WvsR             Instruction adherence rating for Reappraise Negtive         1-11
+NegR_aver
+Pos_Reactivity        Positive watch (pos scale) - Negative watch (pos scale)     1-11
+Neg_Reactivity        Negative watch (neg scale) - Positive watch (neg scale)     1 -11
+Pos_Reactivity_Neutral      Positive watch (pos scale) - Neutral watch (pos scale)     1-11
+Neg_Reactivity_Neutral      Negative watch (neg scale) - Neutral watch (neg scale)     1 -11
+Pos_scale_reappraisal Negative Reappraise (pos scale) - Negaitve Watch pos scale) 1-11
+Neg_scale_reappraisal Negative Reappraisal (neg scale) - Negative Watch (neg scale) 1-11
+
+
+Subjective Emotion Regulation: was created to capture tp what degree subjects felt they were following the reappraise instruction)
+
+Sub_Regulation = NegR_WvsR – NegW_WvsR
+
+
+<br>
+
+(Emotion Regulation Success)
+
+Pos_Reg_Success = NegR_pos – NegW_pos
+
+Neg_Reg_Success = NegW_neg - NegR_neg
+
+Reg_Success = Average (Pos_Reg_Success & Neg_Reg_Success)
+
+
+<br> 
+
+(Emotion Reactivity):comparing the ratings during the positive and negative films
+
+Pos_recativity = PosW_pos – NegW_pos 
+
+Neg_recativity = NegW_neg – PosW_neg
+
+Reactivity = average (Pos_recativity & Neg_Reactivity) 
+
+
+Reactivity (compare to neutral watch):comparing the ratings during the positive and negative films to those from the neutral films
+
+Pos_Reactivity_Neutral = PosW_pos - NeuW_pos
+Neg_Reactivity_Neutral = NegW_neg - NeuW_neg
+Reactivity_Neutral = (Pos_Reactivity + Neg_Reactivity) /2   # Mean
+
+
+<br> 
+
+
+
+# Checking Data
+Volume 571 participants (# no data for 135, 398, 515,547, 558)
+262 participants in behavior data 
+398, 515 are in the csv file that used for old analysis, but no data in stats folder so they are not included.
+
+259 participants was in the final analysis
+
+Hipp_L, Hipp_R, AMYG_L, AMYG_R are highly correlated, so decide use AMY mean for anylasis mean(left_Amygdala, right_Amygadala)
+
+```{r reset data type, echo = FALSE, message=FALSE}
+Volume$age_group <- as.factor(Volume$age_group)
+```
+
+## Correlation b/t brain region
+```{r Correlation b/t brain region, collapse = TRUE}
+# Correlation b/t brain region 
+Brain_cor <- Volume %>%
+  select(left_Hippocampus, right_Hippocampus, left_Amygdala, right_Amygdala)%>%
+  cor(method = "pearson") 
+  
+# P-Value
+Brain_cor_p_value <- Volume %>%
+  select(left_Hippocampus, right_Hippocampus, left_Amygdala, right_Amygdala)%>%
+  cor_pmat(method = "pearson")
+print(Brain_cor)
+#Brain_cor_plot
+ggcorrplot(Brain_cor, colors = c("#B0CFFB", "white", "#31507A")) +
+  labs(title = "Brain Region Correlation")
+
+#Gender and brain correlation
+genderSum <- Volume %>%
+  group_by(gender_text, age_group)%>%
+  summarise(mean = mean(Amygdala),
+            sd = sd(Amygdala),
+            n = n())%>%
+  mutate(se=sd/sqrt(n)) %>%
+  mutate(ic=se*qt((1-0.5)/2+.5, n-1))
+  
+ggplot(genderSum, aes(x=age_group, y=mean, fill=gender_text))+
+  geom_bar(stat="identity", position = position_dodge())+
+  scale_fill_brewer((palette="gender"))+
+  labs(x = "Age Group", y = "Mean of Amygdala",title = "Gender and Amygdala")+
+  geom_errorbar(aes(ymin=mean-se, ymax = mean+se), width=.2, position = position_dodge(.9))+  scale_x_discrete(labels = c("18-30", "31-59", ">60"))
+
+AMY <- Volume$Amygdala
+Hipp <- Volume$Hippocampus
+t.test(Volume$Amygdala,Volume$gender_code)
+
+boxplot(Amygdala ~ gender_text, data = Volume)
+
+# Correlation:Amygdala ~ age 
+cor(Volume$age, Volume$Amygdala)
+lmAge_AMY <- lm(Amygdala ~ age, Volume)
+summary(lmAge_AMY)
+ggplot(Volume, aes(x = age , y = Amygdala))+
+  geom_point(color = "#31507A") +
+  geom_smooth(method = "lm") 
+#Correlation on age and Hippocampus
+cor(Volume$age, Volume$Hippocampus)
+ggplot(Volume, aes(x = age, y = Hippocampus))+
+  geom_point(color = "#31507A") +
+  geom_smooth(method = "lm") +
+  labs(x="age", y="Hippocampus")
+```
+
+
+```{r normality check, message=FALSE,include=FALSE, collapse = TRUE}
+# normality
+hist(Volume$Sub_Regulation)
+hist(Volume$Amygdala)
+mean(Volume$Amygdala)
+
+### Amygdala 
+AMY <- Volume %>%
+  group_by(age_group)%>%
+  summarise(MeanAMY = mean(Amygdala,na.rm = T))
+Volume$AMYSizeGroup[Volume$Amygdala > 1604] <- "large"
+Volume$AMYSizeGroup[Volume$Amygdala < 1604] <- "small"
+#Volume$AMYSizeGroup <- factor(Volume$AMYSizeGroup, 
+#                                 levels = c("1", "2"),
+#                                 labels = c("Smaller", " Larger"))
+
+ggplot(Volume, aes(x = Reg_Success , y = AMYSizeGroup))+
+  geom_point(color = "#31507A") +
+  geom_smooth(method = "lm")+
+  labs(x="Emotion Regulation Success", y="age")
+#This interval is defined so that there is a specified probability that a value lies within it. It is calculated as t * SE. Where t is the value of the Student???s t-distribution for a specific alpha. Its value is often rounded to 1.96 (its value with a big sample size). If the sample size is huge or the distribution not normal, it is better to calculate the CI using the bootstrap method, however.
+
+#alpha=0.05
+#t=qt((1-alpha)/2 + .5, length(vec)-1)   # tend to 1.96 if sample size is big enough
+#CI=t*se
+sum <- Volume %>% 
+  group_by(age_group, AMYSizeGroup) %>% 
+  summarise(n=n(),
+            mean=mean(Sub_Regulation),
+            sd=sd(Sub_Regulation))%>%
+  mutate(se=sd/sqrt(n)) %>%
+  mutate(ic=se*qt((1-0.5)/2+.5, n-1))
+sum <- Volume %>% 
+  group_by(age_group) %>% 
+  summarise(n=n())
+#describe.by(Volume, Volume$age_group, mat = T)
+#Volume_sum <- Data_summary(Volume, "Reg_Success", c("age_group", "AMYSizeGroup"))
+# error with standard Error y = Sub_Regulation Mean
+# ggplot(sum, aes(x=age_group, y=mean, fill=AMYSizeGroup))+
+#   geom_bar(stat="identity", position = position_dodge())+
+#   scale_fill_brewer((palette="AMY Size Group"))+
+#   labs(x = "Age Group", y = "Mean of Sub_Regulation")+
+#   geom_errorbar(aes(ymin=mean-se, ymax = mean+se), width=.2, position = position_dodge(.9))+  scale_x_discrete(labels = c("18-30", "31-59", ">60"))
+#   
+# 
+# #ggboxplot(Volume, x="age_group", y = "Sub_Regulation", color = "AMYSizeGroup")+
+#  # scale_x_discrete(labels = c("18-30", "31-59", ">60"))
+# #
+# ggplot(Volume, aes(x = age, y = Sub_Regulation, group = AMYSizeGroup, color = AMYSizeGroup))+
+#   geom_point()+
+#   geom_smooth(method = "lm")+
+#   scale_color_manual(name = "AMYSizeGroupp",
+#                      breaks = c("small", "large"),
+#                      labels = c("Smaller", "Larger"),
+#                      values = c("#E6B39A","#8EBEE6","#998B50"))+
+#   labs(x="age", y="Emotion Regulation Success")
+
+```
+
+### Regulation abilities by age 
+```{r trying to do mutiple anova, include=FALSE, collapse = TRUE}
+Ratingdf <- pivot_longer(Volume, c(PosW_neg,NeuW_neg,NegW_neg,NegR_neg), names_to = "Condition", values_to = "Rating")
+#  select(c(ssid,age,age_group, Condition, Rating))
+
+#NeuW_neg, NeuW_pos, NeuW_WvsR, NegW_neg, NegW_pos, NegW_WvsR, PosW_neg,
+ #                                PosW_pos, PosW_WvsR, NegR_neg, NegR_pos, NegR_WvsR, Pos_Reactivity,
+  #                               Neg_Reactivity, Reactivity, Sub_Regulation, Pos_Reg_Success, Neg_Reg_Success, Reg_Success
+pairwise.t.test(Ratingdf$Rating, Ratingdf$Condition, p.adjust.method = "none",paired = T)
+Rating_Ano <-  aov(Rating~Condition+Error(ssid),data = Ratingdf)
+A<-summary(Rating_Ano)
+#R<-TukeyHSD(A)
+Ratingdf_agg <- Ratingdf %>%
+  group_by(Condition,ssid) %>%
+  summarise(Neg_Rating = mean(Ratingdf$Rating),n =n())
+#Volume %>% anova_test(dv=Rating, wid=ssid, within = c(PosW_neg, NegW_neg, NeuW_neg, NegR_neg))
+ggplot(Ratingdf_agg, aes(x= Condition, y = Neg_Rating))+
+  geom_point()+
+  geom_smooth(method = "lm")
+
+hist(Volume$PosW_neg)
+hist(Volume$PosW_pos)
+hist(Volume$NeuW_WvsR)
+
+
+abilities<- Volume %>%
+  group_by()
+
+```
+
+
+
+# Linear regression {#linear-regression}
+
+## Subjective Emotion Regulation
+```{r Sub_Regulation, message=FALSE, include=FALSE}
+#lm(target variable (Dependent variable) ~ predictor variables (independent variable), data = data source)
+```
+
+### age/Amygdala~Sub_Regulation
+```{r age~Sub_Regulation, message=FALSE, collapse = TRUE}
+#Linear regression on age and sub_regulation
+lmSub_reg_Age <- lm(Sub_Regulation~age, Volume)
+summary(lmSub_reg_Age)
+ggplot(Volume, aes(x = age, y = Sub_Regulation))+
+  geom_point(color = "#31507A")+
+  geom_smooth(method = "lm")+
+  labs(x="Age", y = "Subjective Emotion Regulation")+
+  labs(title = "Age and Subjective Emotion Regulation")
+
+#sub_Regulation ~ Amygdala ###
+lmSub_reg_AMY <- lm( Sub_Regulation~Amygdala, Volume)
+summary(lmSub_reg_AMY)
+ggplot(Volume, aes(x = Amygdala, y = Sub_Regulation))+
+  geom_point(color = "#31507A") +
+  geom_smooth(method = "lm")+
+  labs(x="Amygdala", y = "Subjective Emotion Regulation") +
+  labs(title = "Amygdala and Subjective Emotion Regulation")
+
+# Sub_Regulation ~age + Amygdala ###
+lmSub_reg_Age_AMY <- lm(Sub_Regulation ~ (age + Amygdala), Volume)
+summary(lmSub_reg_Age_AMY)
+print("age+Amygdala ~ Sub_Regulation with interaction" )
+lmSub_reg_Age_AMY <- lm(Sub_Regulation ~ (age * Amygdala), Volume)
+summary(lmSub_reg_Age_AMY)
+ggplot(Volume, aes(x = Amygdala, y = Sub_Regulation, group = age_group, color = age_group))+
+  geom_point()+
+  geom_smooth(method = "lm")+
+  scale_color_manual(name = "age group",
+                     breaks = c("1", "2", "3"),
+                     labels = c("18-30", "31-59", ">60"),
+                     values = c("#E6B39A","#8EBEE6","#998B50"))+
+  labs(x="Amygdala", y = "Subjective Emotion Regulation")+
+  labs(title = "Amygdala and Subjective Emotion Regulation with Age group")
+```
+
+
+### Hippocampus ~ Sub_Regulation
+```{r Hippocampus ~ Sub_Regulation, message=FALSE, collapse = TRUE}
+##sub_Regulation ~ Hippocampus ###
+lmSub_reg_Hipp <- lm(Sub_Regulation~Hippocampus, Volume)
+summary(lmSub_reg_Hipp)
+ggplot(Volume, aes(x = Hippocampus, y = Sub_Regulation))+
+  geom_point(color = "#31507A") +
+  geom_smooth(method = "lm")+
+  labs(x="Hippocampus", y = "Subjective Emotion Regulation")+
+  labs(title = "Hippocampus and Subjective Emotion Regulation")
+
+#Sub_Regulation  age + Hippocampus###
+lmSub_reg_Age_Hipp <- lm(Sub_Regulation ~ (age + Hippocampus), Volume)
+summary(lmSub_reg_Age_Hipp)
+print("age+Hippocampus ~ Sub_Regulation with interaction" )
+lmSub_reg_Age_Hipp <- lm(Sub_Regulation ~ (age * Hippocampus), Volume)
+summary(lmSub_reg_Age_Hipp)
+ggplot(Volume, aes(x = Hippocampus, y = Sub_Regulation, group = age_group, color = age_group))+
+  geom_point()+
+  geom_smooth(method = "lm")+
+  scale_color_manual(name = "age group",
+                     breaks = c("1", "2", "3"),
+                     labels = c("18-30", "31-59", ">60"),
+                     values = c("#E6B39A","#8EBEE6","#998B50"))+
+  labs(x="Hippocampus", y = "Subjective Emotion Regulation")+
+  labs(title = "Hippocampus and Subjective Emotion Regulation with Age group")
+
+```
+
+
+## Emotion Regulation Success
+### age/Amygdala~Reg_Success()
+```{r age~Reg_Success, message=FALSE, collapse = TRUE}
+### Reg_Success ~ age ###
+lmReg_Succ_Age <- lm(Reg_Success~age, Volume)
+summary(lmReg_Succ_Age)
+ggplot(Volume, aes(x = age, y = Reg_Success))+
+  geom_point(color = "#31507A")+
+  geom_smooth(method = "lm")+
+  labs(x="age", y = "Emotion Regulation Success") +
+  labs(title = "Age and Emotion Regulation Success")
+
+#Reg_Success ~ Amygdala ###
+lmReg_Succ_AMY <- lm( Reg_Success~Amygdala, Volume)
+summary(lmReg_Succ_AMY)
+ggplot(Volume, aes(x = Amygdala, y = Reg_Success))+
+  geom_point(color = "#31507A") +
+  geom_smooth(method = "lm") +
+  labs(x="Amygdala", y = "Emotion Regulation Success")+
+  labs(title = "Amygdala and Emotion Regulation Success")
+
+#Reg_Success ~ age + Amygala###
+lmReg_Succ_Age_AMY <- lm(Reg_Success ~ (age + Amygdala), Volume)
+summary(lmReg_Succ_Age_AMY)
+print("age+Amygdala ~ Reg_Success with interaction" )
+lmReg_Succ_Age_AMY <- lm(Reg_Success ~ (age * Amygdala), Volume)
+summary(lmReg_Succ_Age_AMY)
+ggplot(Volume, aes(x = Amygdala, y = Reg_Success, group = age_group, color = age_group))+
+  geom_point()+
+  geom_smooth(method = "lm")+
+  scale_color_manual(name = "age group",
+                     breaks = c("1", "2", "3"),
+                     labels = c("18-30", "31-59", ">60"),
+                     values = c("#E6B39A","#8EBEE6","#998B50"))+
+  labs(x="Amygdala", y = "Emotion Regulation Success")+
+  labs(title = "Amygdala and Emotion Regulation Success with age group")
+```
+
+
+###HIPP ~ Reg_Success
+```{r Hippocampus ~ Reg_Success, message=FALSE, collapse = TRUE}
+##Hippocampus ~ Reg_Success###
+lmReg_Succ_Hipp <- lm(Reg_Success ~ Hippocampus, Volume)
+summary(lmReg_Succ_Hipp)
+ggplot(Volume, aes(x = Hippocampus, y = Reg_Success))+
+  geom_point(color = "#31507A") +
+  geom_smooth(method = "lm") +
+  labs(x="Hippocampus", y = "Emotion Regulation Success")+
+  labs(title = "Hippocampus and Emotion Regulation Success")
+
+# Reg_Success ~age + Hippocampus###
+lmReg_Succ_Age_Hipp <- lm(Reg_Success ~ (age + Hippocampus), Volume)
+summary(lmReg_Succ_Age_Hipp)
+print("age+Hippocampus ~ Reg_Success with interaction" )
+lmReg_Succ_Age_Hipp <- lm(Reg_Success ~ (age * Hippocampus), Volume)
+summary(lmReg_Succ_Age_Hipp)
+ggplot(Volume, aes(x = Hippocampus, y = Reg_Success, group = age_group, color = age_group))+
+  geom_point()+
+  geom_smooth(method = "lm")+
+  scale_color_manual(name = "age group",
+                     breaks = c("1", "2", "3"),
+                     labels = c("18-30", "31-59", ">60"),
+                     values = c("#E6B39A","#8EBEE6","#998B50"))+
+  labs(x="Hippocampus", y = "Emotion Regulation Success")+
+  labs(title = "Hippocampus and Emotion Regulation Success with age group")
+
+```
+
+## Emotion Reactivity 
+### age/Amygdala~Reactivity (Emotion Reactivity) 
+```{r age~Reactivity, message=FALSE, collapse = TRUE}
+### Reactivity ~ age ###
+cor(Volume$age, Volume$Reactivity)
+lmReactivity_Age <- lm(Reactivity ~ age, Volume)
+summary(lmReactivity_Age)
+ggplot(Volume, aes(x = age, y = Reactivity))+
+  geom_point(color = "#31507A")+
+  geom_smooth(method = "lm")+
+  labs(x="Age", y = "Emotion Reactivity")+
+  labs(title = "age and Emotion Reactivity")
+
+#Reactivity ~ amygdala ###
+lmReactivity_AMY <- lm(Reactivity ~ Amygdala, Volume)
+summary(lmReactivity_AMY)
+ggplot(Volume, aes(x = Amygdala, y = Reactivity))+
+  geom_point(color = "#31507A") +
+  geom_smooth(method = "lm") +
+  labs(x="Amygdala", y = "Emotion Reactivity") +
+  labs(title = "Amygdala and Emotion Reactivity")
+
+#Reactivity ~ age + Amygala###
+lmReactivity_Age_AMY <- lm( Reactivity ~ (age + Amygdala), Volume)
+summary(lmReactivity_Age_AMY)
+print("age+Amygdala ~ Reactivity with interaction" )
+lmReactivity_Age_AMY <- lm( Reactivity ~ (age * Amygdala), Volume)
+summary(lmReactivity_Age_AMY)
+ggplot(Volume, aes(x = Amygdala, y = Reactivity, group = age_group, color = age_group))+
+  geom_point()+
+  geom_smooth(method = "lm")+
+  scale_color_manual(name = "age group",
+                     breaks = c("1", "2", "3"),
+                     labels = c("18-30", "31-59", ">60"),
+                     values = c("#E6B39A","#8EBEE6","#998B50"))+
+  labs(x="Amygdala", y = "Emotion Reactivity")+
+  labs(title = "Amygdala and Emotion Reactivity with age group")
+```
+
+### HIPP ~ Reactivity
+```{r Hippocampus ~ Reactivity, message=FALSE, collapse = TRUE}
+##Reactivity ~ Hippocampus ###
+lmReactivity_Hipp <- lm(Reactivity ~ Hippocampus, Volume)
+summary(lmReactivity_Hipp)
+ggplot(Volume, aes(x = Hippocampus, y = Reactivity))+
+  geom_point(color = "#31507A") +
+  geom_smooth(method = "lm") +
+  labs(x="Hippocampus", y = "Emotion Reactivity")+
+  labs(title = "Hippocampus and Emotion Reactivity")
+
+# Reactivity ~age + Hippocampus###
+lmReactivity_Age_Hipp <- lm(Reactivity ~ (age + Hippocampus), Volume)
+summary(lmReactivity_Age_Hipp)
+print("age+Hippocampus ~ Reactivity with interaction" )
+lmReactivity_Age_Hipp <- lm(Reactivity ~ (age * Hippocampus), Volume)
+summary(lmReactivity_Age_Hipp)
+ggplot(Volume, aes(x = Hippocampus, y = Reactivity, group = age_group, color = age_group))+
+  geom_point()+
+  geom_smooth(method = "lm")+
+  scale_color_manual(name = "age group",
+                     breaks = c("1", "2", "3"),
+                     labels = c("18-30", "31-59", ">60"),
+                     values = c("#E6B39A","#8EBEE6","#998B50"))+
+  labs(x="Hippocampus", y = "Emotion Reactivity")+
+  labs(title = "Hippocampus and Emotion Reactivity with age griyo")
+```
+
+
+
+## Emotion Reactivity (Neutrul) 
+### age/Amygdala~Reactivity_Neutral (Emotion Reactivity Neutrul) 
+```{r age~Reactivity_Neutral, message=FALSE, collapse = TRUE}
+### Reactivity_Neutral ~ age ###
+cor(Volume$age, Volume$Reactivity_Neutral)
+lmReactivity_Neutral_Age <- lm(Reactivity_Neutral ~ age, Volume)
+summary(lmReactivity_Neutral_Age)
+
+ggplot(Volume, aes(x = age, y = Reactivity_Neutral))+
+  geom_point(color = "#31507A")+
+  geom_smooth(method = "lm")+
+  labs(x="Age", y = "Emotion Reactivity") +
+  labs(title = "Age and Emotion Reactivity (Neutrul)")
+
+#Reactivity_Neutral ~ amygdala ###
+lmReactivity_Neutral_AMY <- lm(Reactivity_Neutral ~ Amygdala, Volume)
+summary(lmReactivity_Neutral_AMY)
+ggplot(Volume, aes(x = Amygdala, y = Reactivity_Neutral))+
+  geom_point(color = "#31507A") +
+  geom_smooth(method = "lm") +
+  labs(x="Amygdala", y = "Emotion Reactivity") +
+  labs(title = "Amygdala and Emotion Reactivity (Neutrul)")
+
+#Reactivity_Neutral ~ age + Amygala###
+lmReactivity_Neutral_Age_AMY <- lm( Reactivity_Neutral ~ (age + Amygdala), Volume)
+summary(lmReactivity_Neutral_Age_AMY)
+print("age+Amygdala ~ Reactivity_Neutral with interaction" )
+lmReactivity_Neutral_Age_AMY <- lm( Reactivity_Neutral ~ (age * Amygdala), Volume)
+summary(lmReactivity_Neutral_Age_AMY)
+ggplot(Volume, aes(x = Amygdala, y = Reactivity_Neutral, group = age_group, color = age_group))+
+  geom_point()+
+  geom_smooth(method = "lm")+
+  scale_color_manual(name = "age group",
+                     breaks = c("1", "2", "3"),
+                     labels = c("18-30", "31-59", ">60"),
+                     values = c("#E6B39A","#8EBEE6","#998B50"))+
+  labs(x="Amygdala", y = "Emotion Reactivity")+
+  labs(title = "Amygdala and Emotion Reactivity (Neutrul) with age group")
+
+```
+
+### HIPP ~ Reactivity_Neutral
+```{r Hippocampus ~ Reactivity_Neutral, message=FALSE, collapse = TRUE}
+##Reactivity_Neutral ~ Hippocampus ###
+lmReactivity_Neutral_Hipp <- lm(Reactivity_Neutral ~ Hippocampus, Volume)
+summary(lmReactivity_Neutral_Hipp)
+ggplot(Volume, aes(x = Hippocampus, y = Reactivity_Neutral))+
+  geom_point(color = "#31507A") +
+  geom_smooth(method = "lm") +
+  labs(x="Hippocampus", y = "Emotion Reactivity_Neutral") +
+  labs(title = "Hippocampus and Emotion Reactivity (Neutrul)")
+
+# Reactivity_Neutral ~age + Hippocampus###
+lmReactivity_Neutral_Age_Hipp <- lm(Reactivity_Neutral ~ (age + Hippocampus), Volume)
+summary(lmReactivity_Neutral_Age_Hipp)
+print("age+Hippocampus ~ Reactivity_Neutral with interaction" )
+lmReactivity_Neutral_Age_Hipp <- lm(Reactivity_Neutral ~ (age * Hippocampus), Volume)
+summary(lmReactivity_Neutral_Age_Hipp)
+ggplot(Volume, aes(x = Hippocampus, y = Reactivity, group = age_group, color = age_group))+
+  geom_point()+
+  geom_smooth(method = "lm")+
+  scale_color_manual(name = "age group",
+                     breaks = c("1", "2", "3"),
+                     labels = c("18-30", "31-59", ">60"),
+                     values = c("#E6B39A","#8EBEE6","#998B50"))+
+  labs(x="Hippocampus", y = "Emotion Reactivity")+
+  labs(title = "Hippocampus and Emotion Reactivity (Neutrul) with age group")
+
+```
+
+## Gender 
+```{r Gender Effect, message=FALSE}
+# Subjective Emotion Regulation ####
+ggplot(Volume, aes(x = Amygdala, y = Sub_Regulation, group = gender_text, color = gender_text))+
+  geom_point()+
+  geom_smooth(method = "lm")+
+  scale_color_manual(name = "Gender",
+                     breaks = c("MALE", "FEMALE"),
+                     labels = c("Male", "Female"),
+                     values = c("#E6B39A","#998B50"))+
+  labs(x="Amygdala", y = "Subjective Emotion Regulation")+
+  labs(title = "Amygdala and Subjective Emotion Regulation with gender group")
+
+lmSub_reg_gender_AMY <- lm(Sub_Regulation ~ gender_code, Volume)
+summary(lmSub_reg_gender_AMY)
+
+lmSub_reg_gender_AMY <- lm(Sub_Regulation ~ (Amygdala + gender_code), Volume)
+summary(lmSub_reg_gender_AMY)
+lmSub_reg_gender_AMY <- lm(Sub_Regulation ~ (Amygdala * gender_code), Volume)
+summary(lmSub_reg_gender_AMY)
+
+lmSub_gender_Age_AMY <- lm(Sub_Regulation ~ (age + Amygdala + gender_code), Volume)
+summary(lmSub_gender_Age_AMY)
+lmSub_gender_Age_AMY_int <- lm(Sub_Regulation ~ (age * Amygdala *gender_code), Volume)
+summary(lmSub_gender_Age_AMY_int)
+
+
+
+# Emotion Regulation Success ####
+ggplot(Volume, aes(x = Amygdala, y = Reg_Success, group = gender_text, color = gender_text))+
+  geom_point()+
+  geom_smooth(method = "lm")+
+  scale_color_manual(name = "Gender",
+                     breaks = c("MALE", "FEMALE"),
+                     labels = c("Male", "Female"),
+                     values = c("#E6B39A","#998B50"))+
+  labs(x="Amygdala", y = "Regulation Success")+
+  labs(title = "Amygdala and Regulation Success")
+
+lmReg_Success_gender_AMY <- lm(Reg_Success ~ gender_code, Volume)
+summary(lmReg_Success_gender_AMY)
+
+lmReg_Success_gender_AMY <- lm(Reg_Success ~ (Amygdala + gender_code), Volume)
+summary(lmReg_Success_gender_AMY)
+lmReg_Success_gender_AMY_int <- lm(Reg_Success ~ (Amygdala * gender_code), Volume)
+summary(lmReg_Success_gender_AMY_int)
+
+lmReg_Success_gender_AMY <- lm(Reg_Success ~ (age + Amygdala + gender_code), Volume)
+summary(lmReg_Success_gender_AMY)
+lmReg_Success_Age_AMY_int <- lm(Reg_Success ~ (age * Amygdala *gender_code), Volume)
+summary(lmReg_Success_Age_AMY_int)
+
+
+# Reactivity_Neutral ####
+ggplot(Volume, aes(x = Amygdala, y = Reactivity_Neutral, group = gender_text, color = gender_text))+
+  geom_point()+
+  geom_smooth(method = "lm")+
+  scale_color_manual(name = "Gender",
+                     breaks = c("MALE", "FEMALE"),
+                     labels = c("Male", "Female"),
+                     values = c("#E6B39A","#998B50"))+
+  labs(x="Amygdala", y = "Reactivity_Neutral")+
+  labs(title = "Amygdala and Reactivity_Neutral")
+lmRec_gender_AMY <- lm(Reactivity_Neutral ~ gender_code, Volume)
+summary(lmRec_gender_AMY)
+
+lmRec_gender_AMY <- lm(Reactivity_Neutral ~ (Amygdala + gender_code), Volume)
+summary(lmRec_gender_AMY)
+lmRec_gender_AMY_int <- lm(Reactivity_Neutral ~ (Amygdala * gender_code), Volume)
+summary(lmRec_gender_AMY_int)
+
+lmRec_gender_AMY <- lm(Reactivity_Neutral ~ (age + Amygdala + gender_code), Volume)
+summary(lmRec_gender_AMY)
+lmRec_gender_AMY_int <- lm(Reactivity_Neutral ~ (age * Amygdala *gender_code), Volume)
+summary(lmRec_gender_AMY_int)
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
